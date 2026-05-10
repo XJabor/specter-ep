@@ -1,0 +1,30 @@
+{
+  "tactical_radios": [
+    {
+      "id": "prc_152a",
+      "name": "AN/PRC-152A",
+      "type": "omni",
+      "default_freq_mhz": 300,
+      "max_power_dbm": 37.0,
+      "antenna_gain_dbi": 2.0,
+      "default_height_m": 2.0,
+      "rx_sensitivity_dbm": -100,
+      "beamwidth_deg": 360,
+      "notes": "Initial working preset for ground tactical footprint modeling."
+    }
+  ],
+  "satcom_terminals": [
+    {
+      "id": "hawkeye_iii",
+      "name": "L3Harris Hawkeye III",
+      "type": "satcom",
+      "default_freq_mhz": 12000,
+      "max_power_dbm": 50.0,
+      "antenna_gain_dbi": 24.0,
+      "default_height_m": 1.5,
+      "rx_sensitivity_dbm": -105,
+      "beamwidth_deg": 2.5,
+      "notes": "Directional SATCOM preset visualized with a capped local 3D beam volume."
+    }
+  ]
+}

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Specter-EP | 3D Propagation Engine</title>
+    
+    <!-- External Libraries: Deck.gl for WebGL and Mapbox for the Base Map -->
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --panel-bg: rgba(15, 15, 15, 0.94);
+            --panel-border: rgba(0, 255, 204, 0.2);
+            --panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.58);
+            --text-main: #f6fffb;
+            --text-muted: #8ba39b;
+            --text-soft: #5e726c;
+            --accent: #00ffcc;
+            --accent-dim: rgba(0, 255, 204, 0.12);
+            --danger: #ff7e6b;
+            --surface: #17201d;
+            --surface-2: #101614;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top left, rgba(0, 255, 204, 0.12), transparent 28%),
+                radial-gradient(circle at top right, rgba(255, 126, 107, 0.12), transparent 24%),
+                #08100e;
+            color: var(--text-main);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        .panel {
+            position: absolute;
+            z-index: 1;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            box-shadow: var(--panel-shadow);
+            backdrop-filter: blur(7px);
+        }
+
+        .panel-left {
+            top: 20px;
+            left: 20px;
+            width: 360px;
+            max-height: calc(100vh - 260px);
+            overflow-y: auto;
+            padding: 18px;
+        }
+
+        .panel-right {
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            padding: 18px;
+        }
+
+        .panel h2,
+        .panel h3 {
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .panel h2 {
+            font-size: 1.15rem;
+        }
+
+        .panel h3 {
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .panel-note,
+        .empty-state,
+        .microcopy {
+            color: var(--text-muted);
+            font-size: 0.76rem;
+            line-height: 1.35;
+        }
+
+        .section {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .section:first-of-type {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: 0;
+        }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .field-grid .full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            background: var(--surface-2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            box-sizing: border-box;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+
+        textarea {
+            min-height: 72px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: #01110a;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 6px;
+            margin-top: 10px;
+            text-transform: uppercase;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #00d4aa;
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0, 255, 204, 0.22);
+        }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .button-row button {
+            margin-top: 0;
+        }
+
+        .secondary-button {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid rgba(0, 255, 204, 0.35);
+        }
+
+        .secondary-button:hover {
+            background: var(--accent-dim);
+        }
+
+        .danger-button {
+            color: var(--danger);
+            border-color: rgba(255, 126, 107, 0.35);
+        }
+
+        .danger-button:hover {
+            background: rgba(255, 126, 107, 0.1);
+            box-shadow: none;
+        }
+
+        .system-list,
+        .placed-system-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .system-card,
+        .placed-system-card {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            transition: 0.18s;
+        }
+
+        .system-card:hover,
+        .placed-system-card:hover {
+            border-color: rgba(0, 255, 204, 0.25);
+            background: rgba(0, 255, 204, 0.05);
+        }
+
+        .is-selected {
+            border-color: var(--accent);
+            background: rgba(0, 255, 204, 0.08);
+        }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .card-meta {
+            margin-top: 6px;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            line-height: 1.35;
+        }
+
+        .state-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-muted);
+        }
+
+        .state-idle { color: var(--text-muted); }
+        .state-queued { color: #ffd18b; }
+        .state-running { color: var(--accent); }
+        .state-done { color: #98ffc1; }
+        .state-error { color: var(--danger); }
+
+        #terrain-source {
+            left: 20px;
+            bottom: 20px;
+            width: min(520px, calc(100vw - 40px));
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 1fr 104px;
+            gap: 8px;
+            align-items: end;
+        }
+
+        #terrain-source label,
+        #terrain-source-status {
+            grid-column: 1 / -1;
+        }
+
+        #terrain-source button {
+            margin-top: 0;
+        }
+
+        #terrain-source-status {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-family: monospace;
+            line-height: 1.3;
+            min-height: 1em;
+        }
+
+        #activity-panel {
+            position: absolute;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            z-index: 1;
+            width: min(540px, calc(100vw - 420px));
+            min-width: 320px;
+            padding: 12px 14px;
+        }
+
+        #status-bar {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-family: monospace;
+            line-height: 1.35;
+        }
+
+        .progress-shell {
+            margin-top: 10px;
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ffcc 0%, #7fffe4 100%);
+            transition: width 0.2s ease;
+        }
+
+        .progress-label {
+            margin-top: 8px;
+            color: var(--text-main);
+            font-size: 0.74rem;
+            font-family: monospace;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 1180px) {
+            .panel-left,
+            .panel-right {
+                width: 320px;
+            }
+
+            #activity-panel {
+                width: min(420px, calc(100vw - 380px));
+            }
+        }
+
+        @media (max-width: 900px) {
+            body {
+                overflow: auto;
+            }
+
+            #container {
+                position: fixed;
+            }
+
+            .panel-left,
+            .panel-right {
+                left: 12px;
+                right: 12px;
+                width: auto;
+                max-height: none;
+            }
+
+            .panel-left {
+                top: 12px;
+                max-height: 43vh;
+            }
+
+            .panel-right {
+                top: calc(43vh + 28px);
+                max-height: 32vh;
+            }
+
+            #terrain-source {
+                left: 12px;
+                right: 12px;
+                bottom: 112px;
+                width: auto;
+            }
+
+            #activity-panel {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+                transform: none;
+                width: auto;
+                min-width: 0;
+            }
+
+            .field-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .button-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="instance-panel" class="panel panel-left">
+        <div class="panel-header">
+            <div>
+                <h2>Placed Systems</h2>
+                <div class="panel-note">Select a preset on the right, click the map to place it, then edit the placed instance here.</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Current Instances</h3>
+            <div id="placed-systems-list" class="placed-system-list"></div>
+        </div>
+
+        <div class="section">
+            <h3>Instance Editor</h3>
+            <div id="instance-editor-empty" class="empty-state">No system selected. Click a placed icon or create one from the Systems Library.</div>
+            <div id="instance-editor" class="hidden"></div>
+        </div>
+
+        <div class="section">
+            <div class="button-row">
+                <button id="calculate-all-btn" onclick="calculateAllFootprints()">Calculate Footprints</button>
+                <button class="secondary-button" onclick="clearFootprints()">Clear Results</button>
+            </div>
+            <button id="remove-selected-btn" class="secondary-button danger-button hidden" onclick="removeSelectedSystem()">Remove Selected System</button>
+        </div>
+    </div>
+
+    <div id="library-panel" class="panel panel-right">
+        <div class="panel-header">
+            <div>
+                <h2>Systems Library</h2>
+                <div class="panel-note">Choose a preset or build a session-only custom system. The next map click places one instance.</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Placement Mode</h3>
+            <div id="placement-mode-status" class="microcopy">No system armed for placement.</div>
+        </div>
+
+        <div class="section">
+            <h3>Preset Systems</h3>
+            <div id="systems-library-list" class="system-list"></div>
+        </div>
+
+        <div class="section">
+            <h3>Build Custom System</h3>
+            <div id="custom-system-builder" class="field-grid"></div>
+            <button onclick="createCustomSystem()">Add Custom System</button>
+        </div>
+    </div>
+
+    <div id="terrain-source" class="panel">
+        <label>Offline Terrain / DTED Path</label>
+        <input type="text" id="terrain_path" placeholder="/path/to/dted-folder-or-elevation.tif">
+        <button class="secondary-button" onclick="refreshTerrainSource()">Refresh</button>
+        <div id="terrain-source-status">Terrain source not scanned.</div>
+    </div>
+
+    <div id="activity-panel" class="panel">
+        <div id="status-bar">Specter-EP | Select a system on the right, click the map to place it, then batch-calculate footprints.</div>
+        <div class="progress-shell">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <div id="progress-label" class="progress-label">No calculation in progress.</div>
+    </div>
+
+    <div id="container"></div>
+
+    <script src="js/app.js"></script>
+    <script src="js/ui_controls.js"></script>
+    <script src="/app-config.js"></script>
+    <script src="js/map_deckgl.js"></script>
+
+</body>
+</html>

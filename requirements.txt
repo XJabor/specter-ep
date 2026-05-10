@@ -1,0 +1,7 @@
+Flask==3.0.0
+flask-cors==4.0.0
+numpy==1.26.0
+rasterio==1.4.3
+requests==2.31.0
+# PyPDF2 is included early for when we flesh out the JF12 parser
+PyPDF2==3.0.1

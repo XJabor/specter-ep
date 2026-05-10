@@ -1,0 +1,19 @@
+# Python environment and cache artifacts
+venv/
+__pycache__/
+*.pyc
+
+# Local environment and editor cruft
+.env
+.DS_Store
+.idea/
+.vscode/
+
+# Terrain cache and large elevation/raster assets
+data_store/terrain_cache/
+*.tif
+*.tiff
+*.dt0
+*.dt1
+*.dt2
+*.hgt
