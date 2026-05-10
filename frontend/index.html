@@ -6,7 +6,7 @@
     <title>Specter-EP | 3D Propagation Engine</title>
     
     <!-- External Libraries: Deck.gl for WebGL and Mapbox for the Base Map -->
-    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/deck.gl@8/dist.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
     
@@ -44,6 +44,75 @@
             top: 0;
             left: 0;
             z-index: 0;
+        }
+
+        #system-marker-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .system-map-marker {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            transform: translate(-50%, -100%);
+            border: 3px solid #08100e;
+            border-radius: 18px 18px 18px 2px;
+            box-sizing: border-box;
+            cursor: grab;
+            pointer-events: auto;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.38);
+        }
+
+        .system-map-marker::before {
+            content: "";
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            left: 7px;
+            top: 7px;
+            border-radius: 999px;
+            background: #08100e;
+        }
+
+        .system-map-marker::after {
+            content: "";
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            left: 2px;
+            bottom: -6px;
+            background: inherit;
+            border-right: 3px solid #08100e;
+            border-bottom: 3px solid #08100e;
+            transform: rotate(45deg);
+            box-sizing: border-box;
+        }
+
+        .system-map-marker.ground {
+            background: #00ffcc;
+        }
+
+        .system-map-marker.satcom {
+            background: #ff7e6b;
+        }
+
+        .system-map-marker.selected {
+            background: #ffffff;
+            width: 32px;
+            height: 32px;
+        }
+
+        .system-map-marker.selected::before {
+            left: 8px;
+            top: 8px;
+        }
+
+        .system-map-marker.dragging {
+            cursor: grabbing;
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.52);
         }
 
         .panel {
@@ -482,7 +551,9 @@
     </div>
 
     <div id="container"></div>
+    <div id="system-marker-overlay"></div>
 
+    <script src="https://unpkg.com/mgrs/dist/mgrs.js"></script>
     <script src="js/app.js"></script>
     <script src="js/ui_controls.js"></script>
     <script src="/app-config.js"></script>

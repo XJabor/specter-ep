@@ -72,6 +72,7 @@ const specterApp = {
         if (typeof window.renderLibraryPanel === "function") window.renderLibraryPanel();
         if (typeof window.renderInstancePanel === "function") window.renderInstancePanel();
         if (typeof window.renderMapLayers === "function") window.renderMapLayers();
+        if (typeof window.renderMapMarkersOverlay === "function") window.renderMapMarkersOverlay();
         if (typeof window.renderProgressPanel === "function") window.renderProgressPanel();
     },
 
@@ -94,6 +95,10 @@ const specterApp = {
 
     findSystem(category, presetId) {
         return (this.state.systemsLibrary[category] || []).find(system => system.id === presetId) || null;
+    },
+
+    findInstance(instanceId) {
+        return this.state.placedSystems.find(instance => instance.instanceId === instanceId) || null;
     },
 
     armPlacement(category, presetId) {
@@ -132,6 +137,19 @@ const specterApp = {
 
     getSelectedInstance() {
         return this.state.placedSystems.find(instance => instance.instanceId === this.state.selectedInstanceId) || null;
+    },
+
+    moveInstance(instanceId, lat, lon) {
+        const instance = this.findInstance(instanceId);
+        if (!instance) return null;
+        instance.lat = lat;
+        instance.lon = lon;
+        instance.calcState = instance.calcState === "running" ? "running" : "idle";
+        instance.result = null;
+        instance.error = null;
+        this.state.selectedInstanceId = instanceId;
+        this.refreshUi();
+        return instance;
     },
 
     updateSelectedInstanceField(field, value) {

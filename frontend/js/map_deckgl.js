@@ -12,38 +12,37 @@ function setTerrainSourceStatus(message) {
     if (status) status.innerText = message;
 }
 
-function svgIcon(fillColor, shape) {
-    const body = shape === 'satcom'
-        ? `<path d="M32 10 L54 54 L10 54 Z" fill="${fillColor}" stroke="#ffffff" stroke-width="4"/>`
-        : `<circle cx="32" cy="32" r="20" fill="${fillColor}" stroke="#ffffff" stroke-width="4"/><circle cx="32" cy="32" r="5" fill="#08100e"/>`;
-    return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">${body}</svg>`)}`;
+function markerFillColor(instance, selectedId) {
+    if (instance.instanceId === selectedId) return [255, 255, 255, 230];
+    if (instance.type === 'satcom') return [255, 126, 107, 220];
+    return [0, 255, 204, 220];
 }
 
-const ICONS = {
-    omni: { url: svgIcon('#00ffcc', 'omni'), width: 64, height: 64, anchorY: 32 },
-    satcom: { url: svgIcon('#ff7e6b', 'satcom'), width: 64, height: 64, anchorY: 32 },
+function dragStatusText(instance, lat, lon, action = 'Moving') {
+    return `${action} ${instance.label}: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+}
+const containerElement = document.getElementById('container');
+const markerOverlayElement = document.getElementById('system-marker-overlay');
+const dragState = {
+    activeInstanceId: null,
+    pointerId: null,
+};
+let currentViewState = {
+    longitude: window.specterApp.state.previewEmitter.lon,
+    latitude: window.specterApp.state.previewEmitter.lat,
+    zoom: 10.5,
+    pitch: 58,
+    bearing: 0,
 };
 
 const deckgl = new deck.DeckGL({
     container: 'container',
     mapboxApiAccessToken: MAPBOX_TOKEN,
     mapStyle: 'mapbox://styles/mapbox/satellite-v9',
-    initialViewState: {
-        longitude: window.specterApp.state.previewEmitter.lon,
-        latitude: window.specterApp.state.previewEmitter.lat,
-        zoom: 10.5,
-        pitch: 58,
-        bearing: 0,
-    },
+    initialViewState: currentViewState,
     controller: true,
     layers: [],
     onClick: info => {
-        if (info.object?.instanceId) {
-            window.specterApp.selectInstance(info.object.instanceId);
-            setStatus(`Selected ${info.object.label}.`);
-            return;
-        }
-
         if (!info.coordinate) return;
         const lon = info.coordinate[0];
         const lat = info.coordinate[1];
@@ -59,6 +58,58 @@ const deckgl = new deck.DeckGL({
         window.specterApp.updatePreviewEmitter(lat, lon);
         setStatus(`Preview point set: ${lat.toFixed(5)}, ${lon.toFixed(5)}. Arm a system from the right panel to place it.`);
     },
+    onViewStateChange: ({viewState}) => {
+        currentViewState = { ...viewState };
+        if (typeof window.renderMapMarkersOverlay === 'function') window.renderMapMarkersOverlay();
+        return viewState;
+    },
+});
+
+containerElement.addEventListener('contextmenu', e => e.preventDefault());
+
+function getViewport() {
+    return new deck.WebMercatorViewport({
+        ...currentViewState,
+        width: Math.max(containerElement.clientWidth, 1),
+        height: Math.max(containerElement.clientHeight, 1),
+    });
+}
+
+function moveMarkerFromPointer(clientX, clientY, statusAction) {
+    if (!dragState.activeInstanceId) return;
+    const rect = containerElement.getBoundingClientRect();
+    const viewport = getViewport();
+    const [lon, lat] = viewport.unproject([clientX - rect.left, clientY - rect.top]);
+    const instance = window.specterApp.moveInstance(dragState.activeInstanceId, lat, lon);
+    if (instance) setStatus(dragStatusText(instance, lat, lon, statusAction));
+}
+
+function endMarkerDrag() {
+    if (!dragState.activeInstanceId) return;
+    const movedInstance = window.specterApp.findInstance(dragState.activeInstanceId);
+    if (movedInstance) {
+        setStatus(dragStatusText(movedInstance, movedInstance.lat, movedInstance.lon, 'Moved'));
+    }
+    dragState.activeInstanceId = null;
+    dragState.pointerId = null;
+    if (typeof window.renderMapMarkersOverlay === 'function') window.renderMapMarkersOverlay();
+}
+
+document.addEventListener('pointermove', event => {
+    if (dragState.pointerId !== event.pointerId || !dragState.activeInstanceId) return;
+    event.preventDefault();
+    moveMarkerFromPointer(event.clientX, event.clientY, 'Moving');
+});
+
+document.addEventListener('pointerup', event => {
+    if (dragState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    endMarkerDrag();
+});
+
+document.addEventListener('pointercancel', event => {
+    if (dragState.pointerId !== event.pointerId) return;
+    endMarkerDrag();
 });
 
 function offsetLatLon(lat, lon, distanceMeters, bearingRad) {
@@ -153,16 +204,6 @@ window.renderMapLayers = function renderMapLayers() {
         lineWidthMinPixels: 2,
     });
 
-    const iconLayer = new deck.IconLayer({
-        id: 'system-icons',
-        data: state.placedSystems,
-        pickable: true,
-        sizeScale: 1,
-        getPosition: d => [d.lon, d.lat],
-        getIcon: d => ICONS[d.type === 'satcom' ? 'satcom' : 'omni'],
-        getSize: d => d.instanceId === selectedId ? 54 : 44,
-    });
-
     const haloLayer = new deck.ScatterplotLayer({
         id: 'selection-halo',
         data: state.placedSystems.filter(instance => instance.instanceId === selectedId),
@@ -196,10 +237,53 @@ window.renderMapLayers = function renderMapLayers() {
             footprintLayer,
             beamLayer,
             haloLayer,
-            iconLayer,
             labelLayer,
             previewLayer,
         ],
+    });
+};
+
+window.renderMapMarkersOverlay = function renderMapMarkersOverlay() {
+    if (!markerOverlayElement) return;
+    markerOverlayElement.innerHTML = '';
+    const viewport = getViewport();
+    const { placedSystems, selectedInstanceId } = window.specterApp.state;
+
+    placedSystems.forEach(instance => {
+        const [x, y] = viewport.project([instance.lon, instance.lat]);
+        const marker = document.createElement('button');
+        marker.type = 'button';
+        marker.className = [
+            'system-map-marker',
+            instance.type === 'satcom' ? 'satcom' : 'ground',
+            instance.instanceId === selectedInstanceId ? 'selected' : '',
+            instance.instanceId === dragState.activeInstanceId ? 'dragging' : '',
+        ].filter(Boolean).join(' ');
+        marker.style.left = `${x}px`;
+        marker.style.top = `${y}px`;
+        marker.title = instance.label;
+        marker.setAttribute('aria-label', `Move ${instance.label}`);
+
+        marker.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (dragState.activeInstanceId) return;
+            window.specterApp.selectInstance(instance.instanceId);
+            setStatus(`Selected ${instance.label}.`);
+        });
+
+        marker.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            dragState.activeInstanceId = instance.instanceId;
+            dragState.pointerId = event.pointerId;
+            window.specterApp.selectInstance(instance.instanceId);
+            marker.setPointerCapture(event.pointerId);
+            moveMarkerFromPointer(event.clientX, event.clientY, 'Repositioning');
+            window.renderMapMarkersOverlay();
+        });
+
+        markerOverlayElement.appendChild(marker);
     });
 };
 

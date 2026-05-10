@@ -159,12 +159,31 @@ window.renderInstancePanel = function renderInstancePanel() {
         ? `<div class="microcopy full-width">Last run: ${selected.result.summary.min_range_km.toFixed(2)}-${selected.result.summary.max_range_km.toFixed(2)} km | LOS ${selected.result.summary.los_sector_count}/${selected.result.sectors.length}</div>`
         : `<div class="microcopy full-width">No footprint calculated for this instance yet.</div>`;
 
+    const mgrsCoord = (() => {
+        if (!window.mgrs) return '';
+        try { return window.mgrs.forward([selected.lon, selected.lat]); }
+        catch (_) { return ''; }
+    })();
+
+    const txWattsDisplay = parseFloat(((10 ** (selected.tx_power_dbm / 10)) / 1000).toPrecision(4));
+
     editor.innerHTML = `
         <div class="field-grid">
             ${textField('Label', 'label', selected.label, true)}
+            <div class="full-width">
+                <label>MGRS</label>
+                <input type="text" value="${mgrsCoord}" placeholder="e.g. 4QFJ1234567890"
+                    style="text-transform:uppercase;"
+                    onchange="updateMgrsField(this.value)">
+            </div>
             ${numericField('Latitude', 'lat', selected.lat, 0.00001)}
             ${numericField('Longitude', 'lon', selected.lon, 0.00001)}
             ${numericField('Frequency (MHz)', 'freq_mhz', selected.freq_mhz, 1)}
+            <div>
+                <label>Tx Power (W)</label>
+                <input type="number" value="${txWattsDisplay}" step="0.001" min="0.000001"
+                    onchange="updateTxPowerWatts(this.value)">
+            </div>
             ${numericField('Tx Power (dBm)', 'tx_power_dbm', selected.tx_power_dbm, 0.5)}
             ${numericField('Gain (dBi)', 'antenna_gain_dbi', selected.antenna_gain_dbi, 0.5)}
             ${numericField('Height AGL (m)', 'tx_height_m', selected.tx_height_m, 0.5)}
@@ -251,6 +270,31 @@ window.updateCustomDraftField = function updateCustomDraftField(field, rawValue)
         'rx_sensitivity_dbm', 'beamwidth_deg'
     ]);
     window.specterApp.state.customDraft[field] = numericFields.has(field) ? Number(rawValue) : rawValue;
+};
+
+window.updateMgrsField = function updateMgrsField(rawValue) {
+    if (!window.mgrs) return;
+    try {
+        const [lon, lat] = window.mgrs.toPoint(rawValue.trim().toUpperCase());
+        const instance = window.specterApp.getSelectedInstance();
+        if (!instance) return;
+        instance.lat = lat;
+        instance.lon = lon;
+        instance.calcState = instance.calcState === 'running' ? 'running' : 'idle';
+        instance.result = null;
+        instance.error = null;
+        window.specterApp.refreshUi();
+    } catch (_) {
+        window.specterApp.refreshUi(); // revert field to current valid MGRS
+    }
+};
+
+window.updateTxPowerWatts = function updateTxPowerWatts(rawValue) {
+    const watts = Number(rawValue);
+    if (watts > 0) {
+        const dbm = Math.round(10 * Math.log10(watts * 1000) * 100) / 100;
+        window.specterApp.updateSelectedInstanceField('tx_power_dbm', dbm);
+    }
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
